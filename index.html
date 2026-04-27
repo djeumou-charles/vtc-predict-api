@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>VTC Predict Ultimate v7.2 – Sécurisé & Démo</title>
+    <meta name="description" content="Application de prédiction de courses VTC – Bruxelles, authentification et sécurité">
+    <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22VTC%20Predict%20Ultimate%22%2C%22short_name%22%3A%22VTCPU%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230a0a0a%22%2C%22theme_color%22%3A%22%23ff6b6b%22%7D">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0a0a; color: #fff; overflow-x: hidden; }
+        body.night-mode { background: #000614; }
+        body.drive-mode .matrix-section,
+        body.drive-mode .performance-section,
+        body.drive-mode .filter-bar,
+        body.drive-mode .history-section,
+        body.drive-mode .map-grid,
+        body.drive-mode .poi-grid,
+        body.drive-mode .status-bar .secondary-hide { display: none; }
+        body.drive-mode .map-container { margin-bottom: 0; height: 60vh; }
+        body.drive-mode .alert-zone h2 { font-size: 2.2rem; }
+        .header { background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 15px; text-align: center; border-bottom: 2px solid #ff6b6b; position: sticky; top: 0; z-index: 100; }
+        .header h1 { font-size: 1.4rem; letter-spacing: 1px; }
+        .status-bar { background: #1a1a2e; padding: 10px; display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.7rem; border-bottom: 1px solid #333; }
+        .status-item { background: #0f0f1a; padding: 5px 10px; border-radius: 20px; position: relative; cursor: pointer; }
+        .alert-zone { background: linear-gradient(135deg, #ff6b6b, #ee5a24); padding: 20px; text-align: center; margin: 15px; border-radius: 20px; animation: pulse 1.5s infinite; }
+        .alert-zone.urgent { background: linear-gradient(135deg, #e74c3c, #c0392b); animation: pulse 0.8s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.02); opacity: 1; } 100% { transform: scale(1); opacity: 0.9; } }
+        .alert-zone h2 { font-size: 1.5rem; }
+        .map-container { background: #0f0f1a; margin: 15px; border-radius: 20px; padding: 15px; }
+        #hotspots-map { height: 400px; width: 100%; border-radius: 15px; z-index: 1; }
+        .map-coords { margin-top: 8px; font-size: 0.6rem; text-align: center; color: #888; }
+        .zone-card { background: #1a1a2e; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #333; transition: transform 0.1s ease; }
+        .zone-card.hot { background: linear-gradient(135deg, #ff6b6b, #ee5a24); }
+        .zone-card.warm { background: linear-gradient(135deg, #f39c12, #e67e22); }
+        .zone-card.cold { background: #2c3e50; }
+        .zone-card.recommended { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #ff6b6b; transform: scale(1.02); }
+        .zone-name { font-weight: bold; font-size: 0.8rem; }
+        .zone-prob { font-size: 1.2rem; font-weight: bold; margin: 5px 0; }
+        .zone-time { font-size: 0.6rem; opacity: 0.7; }
+        .map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin: 15px; max-height: 300px; overflow-y: auto; }
+        .matrix-section { background: #1a1a2e; margin: 15px; border-radius: 20px; padding: 15px; }
+        .matrix-title { font-size: 1rem; margin-bottom: 10px; color: #ff6b6b; }
+        .performance-section { background: #1a1a2e; margin: 15px; border-radius: 20px; padding: 15px; }
+        .accuracy-bar { background: #2c3e50; border-radius: 10px; height: 20px; margin: 10px 0; overflow: hidden; }
+        .accuracy-fill { background: linear-gradient(90deg, #4CAF50, #8BC34A); height: 100%; width: 0%; transition: width 0.5s; border-radius: 10px; }
+        .history-section { background: #1a1a2e; margin: 15px; border-radius: 20px; padding: 15px; }
+        .history-list { max-height: 200px; overflow-y: auto; }
+        .history-item { background: #0f0f1a; padding: 8px; margin: 5px 0; border-radius: 8px; font-size: 0.7rem; display: flex; justify-content: space-between; }
+        .history-item.correct { border-left: 3px solid #4CAF50; }
+        .history-item.incorrect { border-left: 3px solid #e74c3c; }
+        .btn-group { display: flex; gap: 10px; margin: 15px; flex-wrap: wrap; }
+        .btn { flex: 1; padding: 12px; background: #ff6b6b; border: none; border-radius: 30px; color: white; font-weight: bold; cursor: pointer; text-align: center; font-size: 0.8rem; }
+        .btn-secondary { background: #2c3e50; }
+        .btn-success { background: #27ae60; }
+        .btn-info { background: #3498db; }
+        .footer { text-align: center; padding: 15px; font-size: 0.6rem; opacity: 0.5; }
+        .toast { position: fixed; bottom: 80px; left: 20px; right: 20px; background: #333; padding: 10px; border-radius: 10px; text-align: center; z-index: 300; animation: fadeOut 3s forwards; }
+        @keyframes fadeOut { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+        .offline-badge { position: fixed; top: 60px; right: 10px; background: #e74c3c; padding: 4px 8px; border-radius: 20px; font-size: 10px; z-index: 150; }
+        .mode-silence { position: fixed; top: 60px; left: 10px; background: #3498db; padding: 4px 8px; border-radius: 20px; font-size: 10px; cursor: pointer; z-index: 150; }
+        .night-mode-btn { position: fixed; bottom: 80px; left: 10px; background: #2c3e50; padding: 8px 12px; border-radius: 30px; font-size: 10px; cursor: pointer; z-index: 150; }
+        .drive-mode-btn { position: fixed; bottom: 80px; right: 10px; background: #27ae60; padding: 8px 12px; border-radius: 30px; font-size: 10px; cursor: pointer; z-index: 150; }
+        .last-update { font-size: 0.5rem; opacity: 0.5; margin-left: 5px; }
+        .user-address { font-size: 0.6rem; color: #4CAF50; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .poi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin: 15px; max-height: 400px; overflow-y: auto; }
+        .poi-card { background: #1a1a2e; border-radius: 12px; padding: 12px; text-align: center; cursor: pointer; border: 1px solid #333; transition: all 0.2s; min-height: 110px; display: flex; flex-direction: column; justify-content: space-between; }
+        .poi-card:hover { transform: scale(1.02); border-color: #ff6b6b; }
+        .poi-card.hot { background: linear-gradient(135deg, #ff6b6b, #ee5a24); }
+        .poi-card.warm { background: linear-gradient(135deg, #f39c12, #e67e22); }
+        .poi-name { font-weight: bold; font-size: 0.85rem; }
+        .poi-prob { font-size: 1.1rem; font-weight: bold; margin: 5px 0; }
+        .poi-distance { font-size: 0.6rem; opacity: 0.7; }
+        .poi-type { font-size: 0.6rem; background: rgba(0,0,0,0.3); display: inline-block; padding: 2px 6px; border-radius: 10px; margin-top: 4px; }
+        .settings-panel { background: #1a1a2e; margin: 15px; border-radius: 20px; padding: 15px; display: none; }
+        .settings-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+        .settings-row label { width: 130px; font-size: 0.7rem; }
+        .alert-actions { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+        .alert-actions .btn { font-size: 1rem; padding: 10px 20px; }
+        .confidence { margin-left: 5px; font-size: 0.8rem; color: #FFD700; }
+        .saturated-badge { background: #e74c3c; color: white; font-size: 0.6rem; padding: 2px 4px; border-radius: 10px; margin-left: 5px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: #1a1a2e; padding: 20px; border-radius: 15px; max-width: 400px; width: 90%; }
+        .modal-content input, .modal-content select { width: 100%; margin: 5px 0; padding: 8px; border-radius: 5px; border: none; }
+        .matrix-table-full { width: 100%; font-size: 0.6rem; border-collapse: collapse; margin-top: 10px; }
+        .matrix-table-full th, .matrix-table-full td { padding: 3px 4px; border-bottom: 1px solid #333; text-align: center; }
+        .matrix-table-full th { background: #2c3e50; color: #ff6b6b; position: sticky; top: 0; }
+        .matrix-table-full tr.active-row { background: #ff6b6b20; }
+        .matrix-table-full .zone-highlight { color: #ff6b6b; font-weight: bold; }
+        .matrix-overflow { overflow-x: auto; max-height: 300px; overflow-y: auto; }
+        .tutorial-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+        .tutorial-box { background: #1a1a2e; padding: 30px; border-radius: 20px; max-width: 400px; text-align: center; }
+        @media (orientation: landscape) { #hotspots-map { height: 70vh; } }
+        /* Auth overlay */
+        .auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0a0a0a; z-index: 5000; display: flex; align-items: center; justify-content: center; }
+        .auth-box { background: #1a1a2e; padding: 30px; border-radius: 20px; max-width: 400px; width: 90%; }
+        .auth-box input { width: 100%; margin: 10px 0; padding: 12px; border-radius: 8px; border: 1px solid #333; background: #0f0f1a; color: #fff; }
+    </style>
+</head>
+<body>
+<!-- Overlay d'authentification -->
+<div id="authOverlay" class="auth-overlay">
+    <div class="auth-box">
+        <h2>🔐 Connexion / Inscription</h2>
+        <div id="authForm">
+            <input type="email" id="authEmail" placeholder="Email">
+            <input type="password" id="authPassword" placeholder="Mot de passe">
+            <button onclick="VTCPredict.login()" class="btn btn-success" style="width:100%">Se connecter</button>
+            <button onclick="VTCPredict.showRegister()" class="btn" style="width:100%; margin-top:10px;">Créer un compte</button>
+            <button onclick="VTCPredict.demoAccess()" class="btn btn-secondary" style="width:100%; margin-top:10px;">🚀 Accès Démo</button>
+            <div id="authMessage" style="margin-top:10px; font-size:0.8rem; color:#ff6b6b;"></div>
+        </div>
+        <div id="registerForm" style="display:none;">
+            <input type="email" id="regEmail" placeholder="Email">
+            <input type="password" id="regPassword" placeholder="Mot de passe">
+            <button onclick="VTCPredict.register()" class="btn btn-success" style="width:100%">S'inscrire</button>
+            <button onclick="VTCPredict.showLogin()" class="btn btn-secondary" style="width:100%; margin-top:10px;">Retour à la connexion</button>
+            <div id="regMessage" style="margin-top:10px; font-size:0.8rem; color:#ff6b6b;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="header">
+    <h1>🚖 VTC Predict Ultimate v7.2</h1>
+    <p>Leader Bruxelles – Collaboratif réel, IA, Conduite optimisée</p>
+    <button id="toggleSettingsBtn" style="position:absolute; right:60px; top:10px; background:#2c3e50; border:none; color:white; border-radius:50%; width:30px; height:30px; cursor:pointer;">⚙️</button>
+    <button id="logoutBtn" style="position:absolute; right:10px; top:10px; background:#e74c3c; border:none; color:white; border-radius:50%; width:30px; height:30px; cursor:pointer; display:none;">🚪</button>
+</div>
+<div class="status-bar">
+    <span class="status-item">🕐 <strong id="currentTime">--:--</strong></span>
+    <span class="status-item">📊 <strong id="currentPlage">---</strong></span>
+    <span class="status-item">🎯 <strong id="recommendedZone">---</strong></span>
+    <span class="status-item secondary-hide">⭐ <strong id="confidenceLevel">---</strong></span>
+    <span class="status-item secondary-hide">⚡ <strong id="serverLoad">---</strong></span>
+    <span class="status-item secondary-hide">🌤️ <span id="weatherInfo">---</span></span>
+    <span class="status-item" onclick="VTCPredict.centerMapOnUser()" style="cursor:pointer;">📍 <strong>Centrer</strong></span>
+    <span class="status-item secondary-hide">🔄 <span id="updateTime" class="last-update">0s</span></span>
+    <span class="status-item secondary-hide">📈 <strong id="accuracyRate">---</strong></span>
+</div>
+<div id="alertContainer"></div>
+<div class="map-container">
+    <div class="matrix-title">🗺️ CARTE INTERACTIVE</div>
+    <div id="hotspots-map"></div>
+    <div class="map-coords" id="mapCoords">🟢 Cliquez sur un marqueur</div>
+</div>
+<div class="map-grid" id="mapGrid"></div>
+<div class="poi-grid" id="poiGrid"><div style="grid-column:1/-1; text-align:center; padding:20px;">⏳ Chargement...</div></div>
+<div class="matrix-section">
+    <div class="matrix-title">📈 MATRICE 10min</div>
+    <div class="matrix-overflow" id="matrixScrollContainer" style="max-height:300px; overflow-y:auto;">
+        <table class="matrix-table-full" id="matrixFullTable">
+            <thead><tr><th>Plage</th><th>Zone #1</th><th>Zone #2</th><th>Zone #3</th><th>Zone #4</th><th>Zone #5</th></tr></thead>
+            <tbody id="matrixFullBody"></tbody>
+        </table>
+    </div>
+</div>
+<div class="performance-section">
+    <div class="matrix-title">🎯 PERFORMANCE</div>
+    <div class="accuracy-bar"><div class="accuracy-fill" id="accuracyFill"></div></div>
+    <div style="font-size:0.7rem; margin-top:5px;" id="performanceDetail"></div>
+</div>
+<div class="btn-group">
+    <button class="btn btn-success" onclick="VTCPredict.addRealCourse(true)">✅ Réussie</button>
+    <button class="btn" onclick="VTCPredict.addRealCourse(false)">❌ Ratée</button>
+    <button class="btn btn-secondary" onclick="VTCPredict.resetHistory()">🗑️ Reset</button>
+    <button class="btn btn-secondary" onclick="VTCPredict.testVoice()">🔊 Voix</button>
+    <button class="btn btn-info" onclick="VTCPredict.exportCSV()">📎 CSV</button>
+    <button class="btn btn-secondary" onclick="VTCPredict.togglePowerMode()">🔋 Éco</button>
+    <button class="btn btn-secondary" onclick="VTCPredict.toggleSilenceMode()">🔇 Silence</button>
+    <button class="btn btn-secondary" onclick="VTCPredict.toggleNightMode()">🌙 Nuit</button>
+    <button class="btn btn-info" onclick="VTCPredict.toggleDriveMode()">🚗 Conduite</button>
+    <button class="btn btn-info" onclick="VTCPredict.openEventModal()">📅 Événement</button>
+    <button class="btn btn-info" onclick="VTCPredict.triggerMLTraining()">🧠 IA</button>
+</div>
+<div class="history-section">
+    <div class="matrix-title">📜 HISTORIQUE</div>
+    <div class="history-list" id="historyList">Aucune course</div>
+</div>
+<div class="footer">v7.2 – Sécurisé & Comptes vérifiés | Démo activée</div>
+<div class="sound-indicator" id="soundIndicator" style="display: none;">🔊</div>
+<div class="offline-badge" id="offlineBadge" style="display: none;">📡</div>
+<div class="mode-silence" id="silenceBadge" style="display: none;" onclick="VTCPredict.toggleSilenceMode()">🔇</div>
+<div class="night-mode-btn" onclick="VTCPredict.toggleNightMode()">🌙</div>
+<div class="drive-mode-btn" onclick="VTCPredict.toggleDriveMode()">🚗</div>
+<div id="eventModal" class="modal">
+    <div class="modal-content">
+        <h3>📅 Signaler un événement</h3>
+        <input type="text" id="eventName" placeholder="Nom"><input type="date" id="eventDate"><input type="time" id="eventTime">
+        <input type="number" id="eventLat" placeholder="Lat" step="any"><input type="number" id="eventLng" placeholder="Lng" step="any">
+        <input type="number" id="eventCrowd" placeholder="Foule (1-10)" min="1" max="10">
+        <button class="btn btn-success" onclick="VTCPredict.submitEvent()">Enregistrer</button>
+        <button class="btn btn-secondary" onclick="VTCPredict.closeEventModal()">Annuler</button>
+    </div>
+</div>
+<div id="settingsPanel" class="settings-panel">
+    <h3>⚙️ Réglages</h3>
+    <div class="settings-row"><label>Seuil vocal (%)</label><input type="range" id="voiceThreshold" min="50" max="100" value="75" oninput="document.getElementById('voiceThresholdVal').innerText=this.value"><span id="voiceThresholdVal">75</span>%</div>
+    <div class="settings-row"><label>Cooldown vocal (s)</label><input type="number" id="voiceCooldown" min="10" max="60" value="15" step="5"></div>
+    <div class="settings-row"><label>Clé API Météo</label><input type="text" id="weatherApiKeyInput"></div>
+    <div class="settings-row"><label>Clé GraphHopper</label><input type="text" id="graphhopperKey"></div>
+    <div class="settings-row"><label>Serveur collaboratif</label><input type="url" id="collabServerUrl" placeholder="https://api.vtcpredict.be"></div>
+    <div class="settings-row"><label>Données collaboratives</label><input type="checkbox" id="enableCollab" checked> <span style="font-size:0.7rem;">(locales si pas de serveur)</span></div>
+    <button class="btn btn-info" onclick="VTCPredict.saveSettings()">Enregistrer</button>
+</div>
+<div id="tutorialOverlay" class="tutorial-overlay" style="display: none;">
+    <div class="tutorial-box">
+        <h2>🚀 Bienvenue !</h2>
+        <p>Simulation de 10 courses pour calibration.</p>
+        <button class="btn btn-success" onclick="VTCPredict.startTutorial()">Démarrer</button>
+        <button class="btn btn-secondary" onclick="VTCPredict.skipTutorial()">Passer</button>
+    </div>
+</div>
+
+<script>
+// ==================== DONNÉES COMPLÈTES (identiques à v7.1) ====================
+const ZONES = [
+    { nom: "Porte Namur", lat: 50.8288, lon: 4.3619, couleur: "🔴", plage: "18h-22h" },
+    { nom: "Louise", lat: 50.8397, lon: 4.3750, couleur: "🟠", plage: "18h-22h" },
+    { nom: "Ambiorix", lat: 50.8411, lon: 4.3826, couleur: "🟡", plage: "18h-22h" },
+    { nom: "Brouckère", lat: 50.8508, lon: 4.3527, couleur: "🟠", plage: "22h-3h" },
+    { nom: "Saint-Gilles", lat: 50.8282, lon: 4.3553, couleur: "🟢", plage: "22h-3h" },
+    { nom: "Flagey", lat: 50.8270, lon: 4.3716, couleur: "🔵", plage: "22h-3h" },
+    { nom: "Gare Nord", lat: 50.8497, lon: 4.3571, couleur: "⚫", plage: "3h-6h" },
+    { nom: "Gare Midi", lat: 50.8355, lon: 4.3355, couleur: "⚫", plage: "3h-6h" },
+    { nom: "Aéroport", lat: 50.9014, lon: 4.4844, couleur: "✈️", plage: "3h-6h" },
+    { nom: "Schuman", lat: 50.8426, lon: 4.3819, couleur: "🏛️", plage: "6h-18h" },
+    { nom: "Arts-Loi", lat: 50.8457, lon: 4.3669, couleur: "💼", plage: "6h-18h" },
+    { nom: "Toison d'Or", lat: 50.8315, lon: 4.3680, couleur: "🛍️", plage: "6h-18h" },
+    { nom: "Saint-Boniface", lat: 50.8330, lon: 4.3730, couleur: "🍽️", plage: "6h-18h" },
+    { nom: "Woluwe Shopping", lat: 50.8363, lon: 4.4246, couleur: "🏬", plage: "6h-18h" },
+    { nom: "Tour & Taxis", lat: 50.8630, lon: 4.3500, couleur: "🏭", plage: "6h-18h" },
+    { nom: "Uccle St-Job", lat: 50.7990, lon: 4.3560, couleur: "🏡", plage: "6h-18h" },
+    { nom: "Beaulieu", lat: 50.8200, lon: 4.3990, couleur: "💼", plage: "6h-18h" },
+    { nom: "Place Jourdan", lat: 50.8374, lon: 4.3821, couleur: "🍽️", plage: "6h-18h" }
+];
+
+const ZONE_PROFILES = {
+    "Porte Namur":[0.5,0.6,0.7,0.8,0.9,0.8,0.7,0.5],"Louise":[0.5,0.6,0.7,0.8,0.9,0.8,0.7,0.5],
+    "Ambiorix":[0.4,0.5,0.6,0.7,0.8,0.7,0.6,0.4],"Brouckère":[0.6,0.5,0.5,0.6,0.7,0.9,0.9,0.7],
+    "Saint-Gilles":[0.5,0.5,0.5,0.6,0.7,0.8,0.9,0.6],"Flagey":[0.5,0.5,0.5,0.6,0.7,0.8,0.9,0.6],
+    "Gare Nord":[0.9,1.0,0.9,0.8,0.8,0.9,0.7,0.5],"Gare Midi":[0.9,1.0,0.9,0.8,0.8,0.9,0.7,0.5],
+    "Aéroport":[0.8,0.9,0.7,0.5,0.5,0.6,0.4,0.3],"Schuman":[0.6,0.8,0.9,1.0,1.0,0.9,0.6,0.4],
+    "Arts-Loi":[0.6,0.8,0.9,0.9,0.9,0.8,0.5,0.3],"Toison d'Or":[0.5,0.6,0.8,0.9,0.9,0.8,0.6,0.4],
+    "Saint-Boniface":[0.4,0.5,0.7,0.8,0.8,0.7,0.6,0.4],"Woluwe Shopping":[0.5,0.6,0.8,0.9,0.9,0.8,0.6,0.4],
+    "Tour & Taxis":[0.5,0.6,0.8,0.9,0.9,0.7,0.5,0.3],"Uccle St-Job":[0.4,0.5,0.7,0.8,0.8,0.7,0.5,0.3],
+    "Beaulieu":[0.4,0.5,0.7,0.8,0.8,0.7,0.5,0.3],"Place Jourdan":[0.4,0.5,0.7,0.8,0.8,0.7,0.6,0.4]
+};
+
+const POI_ZONES = [
+    { nom: "🛍️ Rue Neuve", lat: 50.8515, lng: 4.3570, type: "shopping centre", prob: 98 },
+    { nom: "🛍️ Chaussée d'Ixelles", lat: 50.8310, lng: 4.3690, type: "shopping centre", prob: 94 },
+    { nom: "🛍️ Avenue Louise", lat: 50.8385, lng: 4.3715, type: "shopping centre", prob: 92 },
+    { nom: "🛍️ Toison d'Or", lat: 50.8315, lng: 4.3680, type: "shopping centre", prob: 89 },
+    { nom: "🛍️ Rue Antoine Dansaert", lat: 50.8485, lng: 4.3455, type: "shopping centre", prob: 86 },
+    { nom: "🏛️ Galeries St-Hubert", lat: 50.8475, lng: 4.3540, type: "shopping centre", prob: 88 },
+    { nom: "🛒 Westland Shopping", lat: 50.8370, lng: 4.3160, type: "shopping centre", prob: 93 },
+    { nom: "🛒 Woluwe Shopping", lat: 50.8363, lng: 4.4246, type: "shopping centre", prob: 91 },
+    { nom: "🛒 Docks Bruxsel", lat: 50.8625, lng: 4.3625, type: "shopping centre", prob: 90 },
+    { nom: "🛒 Carrefour Hyper Evere", lat: 50.8710, lng: 4.4010, type: "shopping centre", prob: 87 },
+    { nom: "🏟️ Forêt National", lat: 50.8395, lng: 4.3385, type: "stade", prob: 85 },
+    { nom: "🎵 Ancienne Belgique", lat: 50.8475, lng: 4.3500, type: "concert", prob: 84 },
+    { nom: "🎤 Palais 12", lat: 50.8355, lng: 4.3380, type: "concert", prob: 83 },
+    { nom: "⚽ Stade Roi Baudouin", lat: 50.8950, lng: 4.3365, type: "stade", prob: 78 },
+    { nom: "🏛️ Atomium", lat: 50.8950, lng: 4.3410, type: "touristique", prob: 75 },
+    { nom: "🍽️ Place Saint-Géry", lat: 50.8485, lng: 4.3475, type: "restaurant", prob: 87 },
+    { nom: "🍽️ Saint-Boniface", lat: 50.8330, lng: 4.3730, type: "restaurant", prob: 85 },
+    { nom: "🏥 CHU Saint-Pierre", lat: 50.8325, lng: 4.3420, type: "hôpital", prob: 92 },
+    { nom: "🏥 Cliniques St-Luc", lat: 50.8520, lng: 4.4520, type: "hôpital", prob: 90 },
+    { nom: "🏥 Hôpital Érasme", lat: 50.8130, lng: 4.2650, type: "hôpital", prob: 88 },
+    { nom: "🏥 CHU Brugmann", lat: 50.8760, lng: 4.3250, type: "hôpital", prob: 87 },
+    { nom: "🏥 Clinique Ste-Élisabeth", lat: 50.8650, lng: 4.3850, type: "hôpital", prob: 85 },
+    { nom: "🏥 Hôpital Delta", lat: 50.8120, lng: 4.4010, type: "hôpital", prob: 84 },
+    { nom: "🏥 Clinique St-Jean", lat: 50.8400, lng: 4.3550, type: "hôpital", prob: 83 },
+    { nom: "🏥 Hôpital Bracops", lat: 50.8600, lng: 4.3100, type: "hôpital", prob: 82 },
+    { nom: "🏥 Clinique Basilique", lat: 50.8660, lng: 4.3150, type: "hôpital", prob: 80 },
+    { nom: "🏥 Hôpital Molière", lat: 50.8200, lng: 4.3300, type: "hôpital", prob: 79 },
+    { nom: "🎬 Kinepolis Bruxelles", lat: 50.8940, lng: 4.3520, type: "cinéma", prob: 89 },
+    { nom: "🎬 UGC De Brouckère", lat: 50.8510, lng: 4.3525, type: "cinéma", prob: 88 },
+    { nom: "🎬 Cinéma Palace", lat: 50.8480, lng: 4.3540, type: "cinéma", prob: 86 },
+    { nom: "🎬 Vendôme Cinéma", lat: 50.8280, lng: 4.3630, type: "cinéma", prob: 84 },
+    { nom: "🎬 Cinéma Galeries", lat: 50.8470, lng: 4.3535, type: "cinéma", prob: 82 },
+    { nom: "🎬 Flagey Cinéma", lat: 50.8270, lng: 4.3720, type: "cinéma", prob: 81 },
+    { nom: "💪 Basic-Fit Louise", lat: 50.8380, lng: 4.3710, type: "fitness", prob: 85 },
+    { nom: "💪 Basic-Fit City 2", lat: 50.8500, lng: 4.3580, type: "fitness", prob: 84 },
+    { nom: "💪 Sportcity Molenbeek", lat: 50.8550, lng: 4.3400, type: "fitness", prob: 83 },
+    { nom: "💪 Jims Brussels City", lat: 50.8450, lng: 4.3550, type: "fitness", prob: 82 },
+    { nom: "💪 Aspria Louise", lat: 50.8350, lng: 4.3700, type: "fitness", prob: 81 },
+    { nom: "💪 Basic-Fit Docks", lat: 50.8630, lng: 4.3630, type: "fitness", prob: 83 },
+    { nom: "🏊 Piscine Longchamp", lat: 50.8250, lng: 4.3350, type: "piscine", prob: 80 },
+    { nom: "🏊 Piscine Poseidon", lat: 50.8730, lng: 4.3300, type: "piscine", prob: 78 },
+    { nom: "🌳 Bois de la Cambre", lat: 50.8050, lng: 4.3820, type: "parc", prob: 78 },
+    { nom: "🌳 Parc du Cinquantenaire", lat: 50.8400, lng: 4.3920, type: "parc", prob: 77 },
+    { nom: "🌳 Parc de Bruxelles", lat: 50.8450, lng: 4.3640, type: "parc", prob: 76 },
+    { nom: "🌳 Parc Léopold", lat: 50.8370, lng: 4.3780, type: "parc", prob: 74 },
+    { nom: "🚇 Gare Centrale", lat: 50.8455, lng: 4.3570, type: "gare", prob: 94 },
+    { nom: "🚇 Gare du Midi", lat: 50.8355, lng: 4.3355, type: "gare", prob: 95 },
+    { nom: "🚇 Gare du Nord", lat: 50.8497, lng: 4.3571, type: "gare", prob: 95 },
+    { nom: "🚇 Gare de l'Ouest", lat: 50.8490, lng: 4.3250, type: "gare", prob: 84 },
+    { nom: "🚇 Métro Louise", lat: 50.8385, lng: 4.3710, type: "gare", prob: 88 },
+    { nom: "🚇 Métro Arts-Loi", lat: 50.8457, lng: 4.3669, type: "gare", prob: 86 },
+    { nom: "🎤 Palais 12 (Heysel)", lat: 50.8940, lng: 4.3390, type: "concert", prob: 87 },
+    { nom: "🏟️ Stade Roi Baudouin", lat: 50.8950, lng: 4.3365, type: "stade", prob: 88 },
+    { nom: "🎓 ULB Solbosch", lat: 50.8120, lng: 4.3820, type: "université", prob: 85 },
+    { nom: "🎓 VUB Etterbeek", lat: 50.8220, lng: 4.3950, type: "université", prob: 84 },
+    { nom: "🎓 Saint-Louis", lat: 50.8320, lng: 4.3710, type: "université", prob: 82 },
+    { nom: "🎓 EPHEC", lat: 50.8540, lng: 4.3950, type: "université", prob: 80 },
+    { nom: "🎤 ING Arena", lat: 50.8930, lng: 4.3370, type: "concert", prob: 86 },
+    { nom: "🏟️ Stade Joseph Mariën", lat: 50.8300, lng: 4.3300, type: "stade", prob: 75 },
+    { nom: "🎓 Haute École Galilée", lat: 50.8560, lng: 4.3610, type: "université", prob: 78 },
+    { nom: "🍽️ Quartier Sainte-Catherine", lat: 50.8490, lng: 4.3440, type: "restaurant", prob: 86 },
+    { nom: "🛍️ City2", lat: 50.8510, lng: 4.3580, type: "shopping centre", prob: 91 },
+    { nom: "🏛️ Parlement Européen", lat: 50.8400, lng: 4.3750, type: "touristique", prob: 73 },
+    { nom: "🛒 Delhaize Ixelles", lat: 50.8290, lng: 4.3650, type: "shopping centre", prob: 82 },
+    { nom: "🎤 Cirque Royal", lat: 50.8475, lng: 4.3650, type: "concert", prob: 80 },
+    { nom: "🏟️ Stade Fallon", lat: 50.8100, lng: 4.4000, type: "stade", prob: 71 },
+    { nom: "🌳 Parc de Woluwe", lat: 50.8300, lng: 4.4200, type: "parc", prob: 72 },
+    { nom: "🏥 Clinique du Parc Léopold", lat: 50.8350, lng: 4.3700, type: "hôpital", prob: 77 },
+    { nom: "💪 David Lloyd Uccle", lat: 50.7900, lng: 4.3450, type: "fitness", prob: 76 }
+];
+
+const POI_PROFILES = {
+    "hôpital":     [0.60,0.70,0.80,0.85,0.85,0.80,0.70,0.60],
+    "cinéma":      [0.20,0.20,0.30,0.50,0.70,0.85,0.90,0.60],
+    "restaurant":  [0.40,0.40,0.50,0.60,0.75,0.85,0.85,0.70],
+    "gare":        [0.70,0.85,0.90,0.80,0.80,0.85,0.80,0.60],
+    "shopping centre":[0.50,0.60,0.80,0.90,0.90,0.85,0.70,0.40],
+    "concert":     [0.30,0.30,0.40,0.50,0.70,0.90,0.95,0.50],
+    "stade":       [0.30,0.30,0.40,0.60,0.80,0.90,0.95,0.50],
+    "fitness":     [0.40,0.50,0.60,0.70,0.80,0.70,0.60,0.40],
+    "piscine":     [0.40,0.50,0.60,0.70,0.75,0.70,0.60,0.40],
+    "parc":        [0.50,0.55,0.60,0.65,0.70,0.65,0.55,0.40],
+    "université":  [0.50,0.60,0.80,0.85,0.85,0.70,0.50,0.30],
+    "touristique": [0.60,0.70,0.80,0.85,0.85,0.75,0.60,0.40],
+    "default":     [0.50,0.55,0.65,0.70,0.75,0.70,0.60,0.45]
+};
+
+const JOURS_FERIES = ["2025-01-01","2025-04-21","2025-05-01","2025-12-25"];
+
+function generate144MatrixBase() {
+    const slots = [];
+    const allZones = ZONES.map(z => z.nom);
+    for (let i = 0; i < 144; i++) {
+        const totalMinutes = i * 10;
+        const hour = Math.floor(totalMinutes / 60);
+        const min = totalMinutes % 60;
+        const endTotal = totalMinutes + 10;
+        const endHour = Math.floor(endTotal / 60) % 24;
+        const endMin = endTotal % 60;
+        const label = `${String(hour).padStart(2,'0')}:${String(min).padStart(2,'0')}-${String(endHour).padStart(2,'0')}:${String(endMin).padStart(2,'0')}`;
+        const hourIdx = Math.floor(hour / 3) % 8;
+        const probs = allZones.map(zone => {
+            const profile = ZONE_PROFILES[zone] || [0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5];
+            let base = profile[hourIdx] * 100;
+            const variation = Math.sin((hour + ZONES.findIndex(z=>z.nom===zone)) * Math.PI / 6) * 5;
+            return Math.min(98, Math.max(30, Math.round(base + variation)));
+        });
+        const indexed = allZones.map((zone, idx) => ({ zone, prob: probs[idx] }));
+        indexed.sort((a,b) => b.prob - a.prob);
+        const top5 = indexed.slice(0, 5);
+        slots.push({ label, zones: top5.map(x => x.zone), probs: top5.map(x => x.prob) });
+    }
+    return slots;
+}
+const MATRICE_144_BASE = generate144MatrixBase();
+
+let signaledEvents = JSON.parse(localStorage.getItem('vtc_events') || '[]');
+function saveEvents() { localStorage.setItem('vtc_events', JSON.stringify(signaledEvents)); }
+let collaborativeStats = JSON.parse(localStorage.getItem('vtc_collab') || '{}');
+function saveCollab() { localStorage.setItem('vtc_collab', JSON.stringify(collaborativeStats)); }
+
+// ==================== APPLICATION PRINCIPALE ====================
+const VTCPredict = (function() {
+    const $ = id => document.getElementById(id);
+    let powerSavingMode = false, silenceMode = false, nightMode = false;
+    let BASE_INTERVAL = 2000, POI_INTERVAL = 10000;
+    let updateIntervalId = null, poiIntervalId = null;
+    let lastUpdateTimestamp = Date.now(), lastPredictedZoneId = null;
+    let historiqueCourses = JSON.parse(localStorage.getItem('vtc_historique') || '[]');
+    let calibration = JSON.parse(localStorage.getItem('vtc_calibration') || '{}');
+    let currentUserPosition = { lat: 50.8525, lng: 4.3337 };
+    let currentUserAddress = "Rue du Cheval Noir 17, 1080 Molenbeek-Saint-Jean";
+    let map = null, userMarker = null, routingControl = null, circle5min = null, carMarker = null, carAnimationInterval = null;
+    let voiceThreshold = parseInt(localStorage.getItem('vtc_voice_threshold')||'75');
+    let VOICE_COOLDOWN_MS = parseInt(localStorage.getItem('vtc_voice_cooldown')||'15000');
+    let weatherApiKey = localStorage.getItem('vtc_weather_key') || '';
+    let graphhopperKey = localStorage.getItem('vtc_graphhopper_key') || '';
+    let collabServerUrl = localStorage.getItem('vtc_collab_server') || 'https://vtc-predict-api.onrender.com';
+    let useCollab = localStorage.getItem('vtc_use_collab') !== 'false';
+    let currentWeather = null, mlModel = null, bestZoneCache = null, lastSlotIdx = -1;
+    let manualRouteActive = false, manualDestination = null, manualTimeout = null;
+    let matrixVisible = true;
+    let routeDebounceTimer = null;
+    // Auth
+    let authToken = localStorage.getItem('vtc_auth_token') || '';
+
+    // Fonctions utilitaires (exactement comme dans v7.1)
+    function getCurrentPlageName() { const h = new Date().getHours(); return h>=6&&h<18?"6h-18h":h>=18&&h<22?"18h-22h":h>=22||h<3?"22h-3h":"3h-6h"; }
+    function getDistance(lat1,lon1,lat2,lon2) { const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180; const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2; return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
+    function getEventWeight() { const now=new Date(),day=now.getDay(); let w=0; if(JOURS_FERIES.includes(now.toISOString().split('T')[0]))w+=25; else{if(day===5)w+=15;else if(day===6)w+=12;else if(day===0)w+=5;} return Math.min(45,w); }
+    function getWeatherModifier() { if(!currentWeather?.weather)return 0; const id=currentWeather.weather[0].id,temp=currentWeather.main.temp; let m=0; if(id>=200&&id<600)m+=15;if(id>=600&&id<700)m+=10;if(temp<5)m+=5; return m; }
+    function getConfidenceStars(zoneName) { const plage=getCurrentPlageName(),key=`${zoneName}|${plage}`; const personal=historiqueCourses.filter(c=>c.zone===zoneName&&c.plage===plage).length; const collab=collaborativeStats[key]?.total||0; const total=personal+collab; return total<5?"☆":total<15?"★":total<30?"★★":"★★★"; }
+    function getEventBonus(zoneName) { const now=Date.now(); let bonus=0; signaledEvents.forEach(ev=>{ const start=new Date(ev.date+'T'+ev.time).getTime(),end=start+3*3600000; if(now>start&&now<end){ const dist=getDistance(currentUserPosition.lat,currentUserPosition.lng,ev.lat,ev.lng); if(dist<1)bonus+=ev.crowd*0.02; } }); return bonus; }
+    function getZonePrior(zoneName) { const hourIdx=Math.floor(new Date().getHours()/3)%8; const profile=ZONE_PROFILES[zoneName]||[0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]; let base=profile[hourIdx]*100; const eventMod=(getEventWeight()+getWeatherModifier())/100; base=Math.min(98,base+eventMod*15); return Math.min(0.98,base/100); }
+
+    function computeProbability(zoneName, isPOI=false) {
+        let prior;
+        if(isPOI) { const poi=POI_ZONES.find(p=>p.nom===zoneName); prior=poi?(poi.prob/100)*POI_PROFILES[poi.type][Math.floor(new Date().getHours()/3)%8]:0.3; }
+        else prior=getZonePrior(zoneName);
+        const plage=getCurrentPlageName(),key=`${zoneName}|${plage}`;
+        const courses=historiqueCourses.filter(c=>c.zone===zoneName&&c.plage===plage);
+        let histProb=prior,confidence=0;
+        if(courses.length>0){ const successes=courses.filter(c=>c.correct).length; confidence=Math.min(1,courses.length/20); const cal=calibration[key]||{factor:1.0}; histProb=prior*(1-confidence)+(successes/courses.length)*cal.factor*confidence; }
+        if(useCollab&&collaborativeStats[key]){ const collabFactor=Math.min(0.4,collaborativeStats[key].total/100); histProb=histProb*(1-collabFactor)+(collaborativeStats[key].successes/collaborativeStats[key].total)*collabFactor; }
+        const evBonus=getEventBonus(zoneName);
+        return Math.min(0.99,Math.max(0.05,histProb+evBonus));
+    }
+
+    function estimateVolume(zoneName) { return Math.round(computeProbability(zoneName)*8); }
+
+    function getSaturationIndex(zone) {
+        const key = `${zone}|${getCurrentPlageName()}`;
+        const collabCount = collaborativeStats[key]?.recentDrivers || 0;
+        return Math.min(1, collabCount / 10);
+    }
+
+    function getBestZone() {
+        if(bestZoneCache) return bestZoneCache;
+        const maxDist=1.5; let best=null,bestProb=-1,bestDist=Infinity;
+        ZONES.forEach(z=>{ const dist=getDistance(currentUserPosition.lat,currentUserPosition.lng,z.lat,z.lon); const prob=computeProbability(z.nom); if(dist<=maxDist&&prob>bestProb&&getSaturationIndex(z.nom)<0.8){bestProb=prob;best=z.nom;bestDist=dist;} else if(best===null&&dist<bestDist){bestDist=dist;best=z.nom;bestProb=prob;} });
+        bestZoneCache={nom:best,prob:bestProb};
+        return bestZoneCache;
+    }
+
+    function getRouter() { return graphhopperKey?L.Routing.graphHopper(graphhopperKey,{urlParameters:{vehicle:'car'}}):L.Routing.osrmv1({serviceUrl:'https://router.project-osrm.org/route/v1'}); }
+
+    function animateCarOnRoute(routePoints) {
+        if(carAnimationInterval)clearInterval(carAnimationInterval);
+        if(carMarker)map.removeLayer(carMarker);
+        if(!routePoints||routePoints.length<2)return;
+        const carIcon=L.divIcon({html:'<div style="font-size:28px;transform:translate(-50%,-100%);">🚗</div>',iconSize:[0,0],className:''});
+        carMarker=L.marker(routePoints[0],{icon:carIcon}).addTo(map);
+        let index=0;
+        carAnimationInterval=setInterval(()=>{ index++; if(index>=routePoints.length){clearInterval(carAnimationInterval);carAnimationInterval=null;return;} carMarker.setLatLng(routePoints[index]); },50);
+    }
+
+    function setManualRoute(lat,lng,name) {
+        if(routingControl)map.removeControl(routingControl);
+        if(carMarker)map.removeLayer(carMarker);
+        if(carAnimationInterval)clearInterval(carAnimationInterval);
+        if(manualTimeout)clearTimeout(manualTimeout);
+        manualRouteActive=true; manualDestination={lat,lng,name};
+        routingControl=L.Routing.control({
+            waypoints:[L.latLng(currentUserPosition.lat,currentUserPosition.lng),L.latLng(lat,lng)],
+            router:getRouter(),show:false,lineOptions:{styles:[{color:'#ff6b6b',weight:5}]}
+        }).addTo(map);
+        routingControl.on('routesfound',function(e){
+            const d=(e.routes[0].summary.totalDistance/1000).toFixed(1);
+            $('mapCoords').innerHTML=`📍 ${name} : ${d} km (manuel)`;
+            animateCarOnRoute(e.routes[0].coordinates.map(c=>[c.lat,c.lng]));
+        });
+        routingControl.on('routingerror',function(){
+            const d=getDistance(currentUserPosition.lat,currentUserPosition.lng,lat,lng).toFixed(1);
+            L.polyline([[currentUserPosition.lat,currentUserPosition.lng],[lat,lng]],{color:'#ff6b6b',dashArray:'5,10'}).addTo(map);
+            $('mapCoords').innerHTML=`⚠️ ${name} (ligne droite : ${d} km)`;
+        });
+        manualTimeout=setTimeout(()=>{ if(manualRouteActive){ clearManualRoute(); showToast("Retour automatique à la zone chaude"); } },60000);
+    }
+
+    function clearManualRoute() { if(!manualRouteActive)return; manualRouteActive=false; manualDestination=null; if(manualTimeout)clearTimeout(manualTimeout); refreshRoute(); }
+    function drawRouteToTarget(lat,lng,name) { setManualRoute(lat,lng,name); }
+    function selectZone(name) { const z=ZONES.find(z=>z.nom===name); if(z)drawRouteToTarget(z.lat,z.lon,name); }
+
+    function refreshRoute() {
+        if(!map||manualRouteActive)return;
+        const best=getBestZone(); const target=ZONES.find(z=>z.nom===best.nom);
+        if(!target)return;
+        if(circle5min)circle5min.setLatLng([currentUserPosition.lat,currentUserPosition.lng]);
+        if(routingControl)map.removeControl(routingControl);
+        routingControl=L.Routing.control({
+            waypoints:[L.latLng(currentUserPosition.lat,currentUserPosition.lng),L.latLng(target.lat,target.lon)],
+            router:getRouter(),show:false,lineOptions:{styles:[{color:'#ff6b6b',weight:5}]}
+        }).addTo(map);
+        routingControl.on('routesfound',function(e){
+            const d=(e.routes[0].summary.totalDistance/1000).toFixed(1);
+            $('mapCoords').innerHTML=`🛣️ ${best.nom} : ${d} km`;
+            animateCarOnRoute(e.routes[0].coordinates.map(c=>[c.lat,c.lng]));
+        });
+        routingControl.on('routingerror',function(){
+            const d=getDistance(currentUserPosition.lat,currentUserPosition.lng,target.lat,target.lon).toFixed(1);
+            L.polyline([[currentUserPosition.lat,currentUserPosition.lng],[target.lat,target.lon]],{color:'#ff6b6b',dashArray:'5,10'}).addTo(map);
+            $('mapCoords').innerHTML=`⚠️ Routage indisponible (ligne droite : ${d} km)`;
+        });
+    }
+
+    function centerMapOnUser() { clearManualRoute(); if(currentUserPosition&&map)map.setView([currentUserPosition.lat,currentUserPosition.lng],14); refreshRoute(); }
+
+    function updatePOIs() {
+        const pois=POI_ZONES.map(poi=>{ const p=Math.round(computeProbability(poi.nom,true)*100); const dist=currentUserPosition?getDistance(currentUserPosition.lat,currentUserPosition.lng,poi.lat,poi.lng).toFixed(1):''; return {...poi,score:p,distance:dist}; }).sort((a,b)=>b.score-a.score).slice(0,12);
+        $('poiGrid').innerHTML=pois.map(poi=>`<div class="poi-card ${poi.score>=75?'hot':poi.score>=65?'warm':''}" onclick="VTCPredict.drawRouteToTarget(${poi.lat},${poi.lng},'${poi.nom.replace(/'/g,"\\'")}')"><div class="poi-name">${poi.nom}</div><div class="poi-prob">${poi.score}% <span class="confidence">${getConfidenceStars(poi.nom)}</span></div><div class="poi-distance">📏 ${poi.distance}km</div><div class="poi-type">${poi.type}</div></div>`).join('');
+    }
+
+    function renderMatrixPartial() {
+        if (!matrixVisible) return;
+        const now=new Date(),slotIdx=Math.floor((now.getHours()*60+now.getMinutes())/10)%144;
+        const start=Math.max(0,slotIdx-20),end=Math.min(144,slotIdx+20);
+        const container=$('matrixScrollContainer'),previousScrollTop=container?container.scrollTop:0;
+        const fragment=document.createDocumentFragment(),best=getBestZone().nom;
+        for(let i=start;i<end;i++){
+            const s=MATRICE_144_BASE[i],isActive=i===slotIdx;
+            let probs=s.probs; if(isActive)probs=s.zones.map(z=>Math.round(computeProbability(z)*100));
+            const row=document.createElement('tr'); row.className=isActive?'active-row':'';
+            row.innerHTML=`<td><strong>${s.label}</strong></td>`+s.zones.map((z,idx)=>`<td class="${z===best?'zone-highlight':''}">${z} (${probs[idx]}%)</td>`).join('');
+            fragment.appendChild(row);
+        }
+        const tbody=$('matrixFullBody'); tbody.innerHTML=''; tbody.appendChild(fragment);
+        if(container)container.scrollTop=previousScrollTop;
+        if(container&&slotIdx!==lastSlotIdx){ const activeRow=tbody.querySelector('.active-row'); if(activeRow)activeRow.scrollIntoView({block:'nearest',behavior:'smooth'}); lastSlotIdx=slotIdx; }
+    }
+
+    function updateUI() {
+        bestZoneCache=null; const now=new Date(); const best=getBestZone(); const bestZone=best.nom,prob=Math.round(best.prob*100);
+        const bestZoneCoords=ZONES.find(z=>z.nom===bestZone); const gpsStr=bestZoneCoords?`${bestZoneCoords.lat.toFixed(5)}, ${bestZoneCoords.lon.toFixed(5)}`:'';
+        $('currentTime').innerText=now.toLocaleTimeString('fr-FR');
+        $('currentPlage').innerText=MATRICE_144_BASE[Math.floor((now.getHours()*60+now.getMinutes())/10)%144].label;
+        $('recommendedZone').innerHTML=`${bestZone} (${prob}%) <span class="confidence">${getConfidenceStars(bestZone)}</span>`;
+        $('updateTime').innerText=`${Math.round((Date.now()-lastUpdateTimestamp)/1000)}s`; lastUpdateTimestamp=Date.now();
+        $('confidenceLevel').innerText=getConfidenceStars(bestZone);
+        $('serverLoad').innerText=(now.getHours()>=7&&now.getHours()<=9)||(now.getHours()>=16&&now.getHours()<=18)?'🔴 Élevée':'🟢 Faible';
+        $('mapGrid').innerHTML=ZONES.map(z=>{ const p=Math.round(computeProbability(z.nom)*100); const sat=getSaturationIndex(z.nom); const satBadge=sat>0.8?' <span class="saturated-badge">SATURÉ</span>':''; const cls=p>=75?'hot':p>=55?'warm':'cold'; return `<div class="zone-card ${cls} ${z.nom===bestZone?'recommended':''}" onclick="VTCPredict.selectZone('${z.nom}')"><div class="zone-name">${z.couleur} ${z.nom}</div><div class="zone-prob">${p}% <span class="confidence">${getConfidenceStars(z.nom)}</span>${satBadge}</div><div class="zone-time">${z.plage} ${estimateVolume(z.nom)} courses</div></div>`; }).join('');
+        renderMatrixPartial();
+        if(lastPredictedZoneId!==bestZone){ lastPredictedZoneId=bestZone; $('alertContainer').innerHTML=`<div class="alert-zone ${prob>=80?'urgent':''}"><h2>🔥 ZONE CHAUDE : ${bestZone} (${prob}%)</h2><p>📍 ${gpsStr}</p><p>Volume estimé : ${estimateVolume(bestZone)} courses</p><div class="alert-actions"><button class="btn btn-success" onclick="VTCPredict.addRealCourse(true)">✅ Réussie</button><button class="btn" onclick="VTCPredict.addRealCourse(false)">❌ Ratée</button></div></div>`; if(map&&!manualRouteActive)refreshRoute(); }
+    }
+
+    async function syncCollaborativeData() {
+        if (!collabServerUrl) return;
+        const recent = historiqueCourses.filter(c => !c.synced);
+        for (const c of recent) {
+            try {
+                await fetch(collabServerUrl + '/api/report', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zone: c.zone, plage: c.plage, correct: c.correct })
+                });
+                c.synced = true;
+            } catch {}
+        }
+        if (recent.length) localStorage.setItem('vtc_historique', JSON.stringify(historiqueCourses));
+        try {
+            const resp = await fetch(collabServerUrl + '/api/stats');
+            const data = await resp.json();
+            collaborativeStats = data;
+            saveCollab();
+        } catch {}
+    }
+
+    function addRealCourse(correct) {
+        const now=new Date(),best=getBestZone(),zoneName=best.nom,plage=getCurrentPlageName();
+        historiqueCourses.unshift({date:now.toISOString(),heure:now.getHours()+':'+String(now.getMinutes()).padStart(2,'0'),zone:zoneName,plage,correct});
+        if(historiqueCourses.length>200)historiqueCourses.length=200;
+        const key=`${zoneName}|${plage}`; if(!calibration[key])calibration[key]={successes:0,total:0,factor:1}; calibration[key].total++; if(correct)calibration[key].successes++;
+        if(useCollab){ if(!collaborativeStats[key])collaborativeStats[key]={successes:0,total:0,recentDrivers:0}; collaborativeStats[key].total++; if(correct)collaborativeStats[key].successes++; collaborativeStats[key].recentDrivers = (collaborativeStats[key].recentDrivers||0)+1; saveCollab(); }
+        localStorage.setItem('vtc_historique',JSON.stringify(historiqueCourses)); localStorage.setItem('vtc_calibration',JSON.stringify(calibration));
+        updatePerformance(); updateUI();
+        syncCollaborativeData();
+    }
+
+    function resetHistory() { historiqueCourses=[]; calibration={}; localStorage.removeItem('vtc_historique'); localStorage.removeItem('vtc_calibration'); updatePerformance(); updateUI(); }
+
+    function updatePerformance() {
+        const total=historiqueCourses.length;
+        if(!total){ $('accuracyRate').innerText='---'; $('accuracyFill').style.width='0%'; $('performanceDetail').innerText='Aucune donnée'; return; }
+        const correct=historiqueCourses.filter(c=>c.correct).length,acc=Math.round(correct/total*100);
+        $('accuracyRate').innerText=`${acc}%`; $('accuracyFill').style.width=`${acc}%`; $('performanceDetail').innerText=`${correct}/${total} correctes`;
+    }
+
+    function openSettings() { const panel=$('settingsPanel'); panel.style.display=(panel.style.display==='block')?'none':'block'; }
+    function saveSettings() {
+        voiceThreshold=parseInt($('voiceThreshold').value)||75; VOICE_COOLDOWN_MS=parseInt($('voiceCooldown').value)*1000||15000;
+        weatherApiKey=$('weatherApiKeyInput').value.trim(); graphhopperKey=$('graphhopperKey').value.trim(); collabServerUrl=$('collabServerUrl').value.trim(); useCollab=$('enableCollab').checked;
+        if(weatherApiKey)localStorage.setItem('vtc_weather_key_enc',btoa(weatherApiKey)); else localStorage.removeItem('vtc_weather_key_enc');
+        localStorage.setItem('vtc_voice_threshold',voiceThreshold); localStorage.setItem('vtc_voice_cooldown',VOICE_COOLDOWN_MS);
+        localStorage.setItem('vtc_graphhopper_key',graphhopperKey); localStorage.setItem('vtc_collab_server',collabServerUrl); localStorage.setItem('vtc_use_collab',useCollab);
+        $('settingsPanel').style.display='none'; showToast("Réglages sauvegardés");
+    }
+
+    function showToast(msg){ const t=document.createElement('div'); t.className='toast'; t.innerText=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3000); }
+
+    async function fetchWeather() {
+        const key=localStorage.getItem('vtc_weather_key_enc'); if(!key)return;
+        try{ weatherApiKey=atob(key); }catch{ return; }
+        try{ const r=await fetch(`https://api.openweathermap.org/data/2.5/weather?q=Bruxelles,BE&appid=${weatherApiKey}&units=metric&lang=fr`); const d=await r.json(); currentWeather=d; $('weatherInfo').innerHTML=`${d.weather[0].description} ${Math.round(d.main.temp)}°C`; }catch(e){}
+    }
+
+    function startTutorial() {
+        for(let i=0;i<10;i++){ const rnd=ZONES[Math.floor(Math.random()*ZONES.length)]; historiqueCourses.unshift({date:new Date(Date.now()-Math.random()*86400000).toISOString(),heure:'00:00',zone:rnd.nom,plage:getCurrentPlageName(),correct:Math.random()>0.4}); }
+        localStorage.setItem('vtc_historique',JSON.stringify(historiqueCourses));
+        document.getElementById('tutorialOverlay').style.display='none'; updateUI(); showToast("Calibration terminée !");
+    }
+    function skipTutorial(){ document.getElementById('tutorialOverlay').style.display='none'; }
+
+    async function triggerMLTraining() {
+        try{
+            const tf=await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js');
+            const data=historiqueCourses.map(c=>{ const d=new Date(c.date); return{prior:getZonePrior(c.zone),hour:d.getHours()/24,day:d.getDay()/7,weather:0,traffic:0,correct:c.correct?1:0}; });
+            const xs=data.map(d=>[d.prior,d.hour,d.day,d.weather,d.traffic]),ys=data.map(d=>d.correct);
+            const model=tf.sequential(); model.add(tf.layers.dense({units:8,activation:'relu',inputShape:[5]})); model.add(tf.layers.dense({units:1,activation:'sigmoid'}));
+            model.compile({optimizer:'adam',loss:'binaryCrossentropy'}); await model.fit(tf.tensor2d(xs),tf.tensor2d(ys,[ys.length,1]),{epochs:20});
+            mlModel=model; await model.save('indexeddb://vtc-model'); showToast("Modèle IA entraîné et sauvegardé !");
+        }catch(e){ showToast("Erreur entraînement IA. Vérifiez votre connexion."); }
+    }
+
+    async function loadModel() { try { mlModel = await tf.loadLayersModel('indexeddb://vtc-model'); } catch {} }
+
+    function initMap() {
+        map=L.map('hotspots-map').setView([currentUserPosition.lat,currentUserPosition.lng],13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'CartoDB',subdomains:'abcd',maxZoom:19}).addTo(map);
+        const carIcon=L.divIcon({html:'<div style="font-size:28px;transform:translate(-50%,-100%);">🚗</div>',iconSize:[0,0],className:''});
+        userMarker=L.marker([currentUserPosition.lat,currentUserPosition.lng],{icon:carIcon,draggable:true}).addTo(map).bindPopup('Ma position').openPopup();
+        userMarker.on('dragend',function(e){ const ll=e.target.getLatLng(); currentUserPosition={lat:ll.lat,lng:ll.lng}; clearTimeout(routeDebounceTimer); routeDebounceTimer=setTimeout(()=>{updateUserAddress();if(!manualRouteActive)refreshRoute();},800); });
+        circle5min=L.circle([currentUserPosition.lat,currentUserPosition.lng],{radius:1500,color:'#4CAF50',fill:false,dashArray:'10,10'}).addTo(map);
+        ZONES.forEach(z=>L.marker([z.lat,z.lon]).addTo(map).bindPopup(z.nom));
+        POI_ZONES.forEach(poi=>L.circleMarker([poi.lat,poi.lng],{radius:5,color:'#ff6b6b',fillColor:'#ff6b6b',fillOpacity:0.5}).addTo(map).bindPopup(poi.nom));
+        updateUserAddress(); refreshRoute();
+    }
+
+    async function updateUserAddress() {
+        try{
+            const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${currentUserPosition.lat}&lon=${currentUserPosition.lng}&zoom=18`,{signal:AbortSignal.timeout(3000)});
+            const d=await r.json(); currentUserAddress=d?.display_name?.substring(0,60)||`${currentUserPosition.lat.toFixed(5)},${currentUserPosition.lng.toFixed(5)}`;
+            $('userAddress').innerText=currentUserAddress; if(userMarker)userMarker.setPopupContent(`<strong>Ma position</strong><br>${currentUserAddress}`).openPopup();
+        }catch(e){}
+    }
+
+    function setupMatrixObserver() {
+        const matrixSection = document.querySelector('.matrix-section');
+        if (!matrixSection) return;
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => { matrixVisible = entry.isIntersecting; });
+        }, { threshold: 0.1 });
+        observer.observe(matrixSection);
+    }
+
+    // AUTH
+    function showLogin() { $('authForm').style.display='block'; $('registerForm').style.display='none'; }
+    function showRegister() { $('authForm').style.display='none'; $('registerForm').style.display='block'; }
+    function demoAccess() {
+        authToken = 'demo-token-' + Date.now();
+        localStorage.setItem('vtc_auth_token', authToken);
+        document.getElementById('authOverlay').style.display = 'none';
+        document.getElementById('logoutBtn').style.display = 'block';
+        startMainApp();
+    }
+    async function login() {
+        const email = $('authEmail').value, password = $('authPassword').value;
+        if (!collabServerUrl) { $('authMessage').innerText = 'Serveur collaboratif non configuré. Utilisez le mode démo.'; return; }
+        try {
+            const resp = await fetch(collabServerUrl + '/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await resp.json();
+            if (data.token) {
+                authToken = data.token;
+                localStorage.setItem('vtc_auth_token', authToken);
+                document.getElementById('authOverlay').style.display = 'none';
+                document.getElementById('logoutBtn').style.display = 'block';
+                startMainApp();
+            } else {
+                $('authMessage').innerText = data.error || 'Erreur';
+            }
+        } catch (e) { $('authMessage').innerText = 'Serveur injoignable'; }
+    }
+    async function register() {
+        const email = $('regEmail').value, password = $('regPassword').value;
+        if (!collabServerUrl) { $('regMessage').innerText = 'Serveur collaboratif non configuré. Utilisez le mode démo.'; return; }
+        try {
+            const resp = await fetch(collabServerUrl + '/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                $('regMessage').innerText = 'Vérifiez votre email pour le code de vérification.';
+            } else {
+                $('regMessage').innerText = data.error || 'Erreur';
+            }
+        } catch (e) { $('regMessage').innerText = 'Serveur injoignable'; }
+    }
+    function logout() {
+        authToken = '';
+        localStorage.removeItem('vtc_auth_token');
+        document.getElementById('authOverlay').style.display = 'flex';
+        document.getElementById('logoutBtn').style.display = 'none';
+        if (updateIntervalId) clearInterval(updateIntervalId);
+        if (poiIntervalId) clearInterval(poiIntervalId);
+        // Cacher les sections de l'application si désiré
+        document.querySelector('.map-container').style.display = 'none';
+    }
+
+    function startMainApp() {
+        document.querySelector('.map-container').style.display = 'block';
+        if(historiqueCourses.length===0)document.getElementById('tutorialOverlay').style.display='flex';
+        $('voiceThreshold').value=voiceThreshold; $('voiceThresholdVal').innerText=voiceThreshold; $('voiceCooldown').value=VOICE_COOLDOWN_MS/1000;
+        $('weatherApiKeyInput').value=weatherApiKey||(localStorage.getItem('vtc_weather_key_enc')?atob(localStorage.getItem('vtc_weather_key_enc')):''); $('graphhopperKey').value=graphhopperKey; $('collabServerUrl').value=collabServerUrl; $('enableCollab').checked=useCollab;
+        loadModel();
+        setupMatrixObserver();
+        updateUI();
+        updateIntervalId=setInterval(updateUI,BASE_INTERVAL);
+        poiIntervalId=setInterval(updatePOIs,POI_INTERVAL);
+        setTimeout(initMap,500);
+        if('geolocation' in navigator) navigator.geolocation.watchPosition(pos=>{ currentUserPosition={lat:pos.coords.latitude,lng:pos.coords.longitude}; if(userMarker)userMarker.setLatLng([currentUserPosition.lat,currentUserPosition.lng]); if(circle5min)circle5min.setLatLng([currentUserPosition.lat,currentUserPosition.lng]); updateUserAddress(); if(!routeDebounceTimer&&!manualRouteActive)refreshRoute(); },()=>{},{enableHighAccuracy:true,maximumAge:10000});
+        if(weatherApiKey) fetchWeather();
+        if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
+        setInterval(()=>{ if(!('Notification' in window)||Notification.permission!=='granted')return; const future=new Date(Date.now()+10*60000); const slotIdx=Math.floor((future.getHours()*60+future.getMinutes())/10)%144; const probs=MATRICE_144_BASE[slotIdx].zones.map(z=>computeProbability(z)); const maxProb=Math.max(...probs); if(maxProb>=0.8) new Notification(`🔥 ${MATRICE_144_BASE[slotIdx].zones[probs.indexOf(maxProb)]} dans 10 min`,{body:`Probabilité ${Math.round(maxProb*100)}%`,icon:'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚖</text></svg>'}); },60000);
+        if('serviceWorker' in navigator){ const swBlob=new Blob([`const CACHE='vtc-v7';self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/'])));});self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));});`],{type:'application/javascript'}); navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(()=>{}); }
+        document.getElementById('toggleSettingsBtn').addEventListener('click',openSettings);
+        document.getElementById('logoutBtn').addEventListener('click',logout);
+        if(!localStorage.getItem('vtc_privacy_accepted')){ setTimeout(()=>{ if(confirm("Politique de confidentialité : vos données restent locales. Les données collaboratives sont anonymisées. OK ?")) localStorage.setItem('vtc_privacy_accepted','1'); },1000); }
+    }
+
+    function start() {
+        if (authToken) {
+            document.getElementById('authOverlay').style.display = 'none';
+            document.getElementById('logoutBtn').style.display = 'block';
+            startMainApp();
+        } else {
+            document.getElementById('authOverlay').style.display = 'flex';
+        }
+        document.getElementById('toggleSettingsBtn').addEventListener('click',openSettings);
+    }
+
+    return {
+        start, login, register, showRegister, showLogin, demoAccess, logout,
+        addRealCourse, resetHistory, selectZone, drawRouteToTarget,
+        togglePowerMode:()=>{ powerSavingMode=!powerSavingMode; BASE_INTERVAL=powerSavingMode?5000:2000; clearInterval(updateIntervalId); updateIntervalId=setInterval(updateUI,BASE_INTERVAL); },
+        toggleSilenceMode:()=>{ silenceMode=!silenceMode; $('silenceBadge').style.display=silenceMode?'block':'none'; },
+        toggleNightMode:()=>{ nightMode=!nightMode; document.body.classList.toggle('night-mode',nightMode); },
+        toggleDriveMode:()=>{ document.body.classList.toggle('drive-mode'); },
+        openEventModal:()=>{ $('eventModal').style.display='flex'; }, closeEventModal:()=>{ $('eventModal').style.display='none'; },
+        submitEvent:()=>{ const n=$('eventName').value,d=$('eventDate').value,t=$('eventTime').value,lat=parseFloat($('eventLat').value),lng=parseFloat($('eventLng').value),c=parseInt($('eventCrowd').value)||5; if(!n||!d||!t||isNaN(lat)||isNaN(lng))return; signaledEvents.push({name:n,date:d,time:t,lat,lng,crowd:c}); saveEvents(); closeEventModal(); showToast("Événement enregistré"); },
+        testVoice:()=>{ if('speechSynthesis' in window){ const u=new SpeechSynthesisUtterance('Test vocal'); u.lang='fr-FR'; speechSynthesis.speak(u); } },
+        exportCSV:()=>{ if(!historiqueCourses.length)return; let csv='Date,Heure,Zone,Plage,Correct\n'; historiqueCourses.forEach(c=>csv+=`${c.date},${c.heure},${c.zone},${c.plage},${c.correct?"Oui":"Non"}\n`); const b=new Blob([csv],{type:'text/csv'}),a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='vtc_historique.csv'; a.click(); },
+        triggerMLTraining, saveSettings, startTutorial, skipTutorial, centerMapOnUser, refreshRoute,
+        toggleSettings: openSettings,
+    };
+})();
+document.addEventListener('DOMContentLoaded', VTCPredict.start);
+</script>
+</body>
+</html>
